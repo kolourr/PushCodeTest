@@ -21,5 +21,5 @@ Tech Used: HTML, CSS, Javascript, Nodejs, MomentJS.
 `npm start`
 
 # Future Optimizations
-- Beautiful frontend display
+- Beautify frontend
 - Optimize analysis speed
