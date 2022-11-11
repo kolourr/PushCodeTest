@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title></title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="" />
+  </head>
+
+  <body>
+    <h1>Aperture Laboratories</h1>
+    <pre class="display"></pre>
+
+    <script src="/js/moment.min.js"></script>
+    <script>
+      let employeesTime = [];
+      //Using the fetch API to parse through the apertureLabsClocks JSON file
+      fetch("./apertureLabsClocks.json")
+        .then((response) => response.json())
+        .then((data) => {
+          data.clocks.forEach((item, index, arr) => {
+            //Using MomentJS to analyze date  & time
+            let startDate = moment(data.clocks[index].clock_in_datetime);
+            let endDate = moment(data.clocks[index].clock_out_datetime);
+
+            //Calculate the number of hours worked
+            let total = endDate.diff(startDate, "hours", "minutes", "seconds");
+            let period1, period2, period3, period4;
+
+            //If the employee has worked more than 24 hours, then multiple enteries are required in the array as the output needs to be single employee/date
+            if (total > 24) {
+              let len = Math.floor(total / 24);
+
+              //Create number of enteries based on the number of 24 hour shifts worked by the employee
+              for (let i = 0; i < len; i++) {
+                let date;
+                i == 0
+                  ? (date = startDate.add(0, "days"))
+                  : (date = startDate.add(1, "days"));
+                let employee = {
+                  employee_id: data.clocks[index].employee_id,
+                  first_name:
+                    data.employees[data.clocks[index].employee_id].first_name,
+                  last_name:
+                    data.employees[data.clocks[index].employee_id].last_name,
+                  labour: [
+                    {
+                      date: date.format("YYYY-MM-DD"),
+                      total: 24,
+                      labour_by_time_period: {
+                        period1: 7,
+                        period2: 6,
+                        period3: 5,
+                        period4: 6,
+                      },
+                    },
+                  ],
+                };
+                employeesTime.push(employee);
+              }
+
+              //Create an entry for any additional time worked for the extended hour shift
+              let remainingTime = total - len * 24;
+              let periods = getPeriods(
+                remainingTime,
+                startDate.add(endDate.diff(startDate, "days"), "days")
+              );
+
+              employee = {
+                employee_id: data.clocks[index].employee_id,
+                first_name:
+                  data.employees[data.clocks[index].employee_id].first_name,
+                last_name:
+                  data.employees[data.clocks[index].employee_id].last_name,
+                labour: [
+                  {
+                    date: endDate.format("YYYY-MM-DD"),
+                    total: remainingTime,
+                    labour_by_time_period: {
+                      period1: periods[0],
+                      period2: periods[1],
+                      period3: periods[2],
+                      period4: periods[3],
+                    },
+                  },
+                ],
+              };
+              employeesTime.push(employee);
+            } else {
+              let startTime = startDate;
+              let originalTotal = total;
+              //Get the breakdwon of various time periods
+              let periods = getPeriods(total, startTime);
+
+              //Check to see if the employee exists and if they already punched in for today
+              const exists = employeesTime.some(
+                (x) =>
+                  x.employee_id === data.clocks[index].employee_id &&
+                  x.labour[0].date === startDate.format("YYYY-MM-DD")
+              );
+
+              //Checking to see if the employee ID and date already exists. If no, then create a new object; If yes, simply add to the object
+              if (!exists) {
+                employee = {
+                  employee_id: data.clocks[index].employee_id,
+                  first_name:
+                    data.employees[data.clocks[index].employee_id].first_name,
+                  last_name:
+                    data.employees[data.clocks[index].employee_id].last_name,
+                  labour: [
+                    {
+                      date: startDate.format("YYYY-MM-DD"),
+                      total: originalTotal,
+                      labour_by_time_period: {
+                        period1: periods[0],
+                        period2: periods[1],
+                        period3: periods[2],
+                        period4: periods[3],
+                      },
+                    },
+                  ],
+                };
+                employeesTime.push(employee);
+              } else {
+                //Find the entry in the array that has same employee id and date that is currently part of the loop
+
+                const find = employeesTime.filter(
+                  (x) =>
+                    x.employee_id === data.clocks[index].employee_id &&
+                    x.labour[0].date === startDate.format("YYYY-MM-DD")
+                );
+
+                find[0].labour[0].labour_by_time_period["period1"] =
+                  find[0].labour[0].labour_by_time_period["period1"] +
+                  periods[0];
+
+                find[0].labour[0].labour_by_time_period["period2"] =
+                  find[0].labour[0].labour_by_time_period["period2"] +
+                  periods[1];
+
+                find[0].labour[0].labour_by_time_period["period3"] =
+                  find[0].labour[0].labour_by_time_period["period3"] +
+                  periods[2];
+
+                find[0].labour[0].labour_by_time_period["period4"] =
+                  find[0].labour[0].labour_by_time_period["period4"] +
+                  periods[3];
+
+                find[0].labour[0].total =
+                  find[0].labour[0].total + originalTotal;
+              }
+            }
+          });
+
+          let newJSONFile = JSON.stringify(employeesTime, undefined, 2);
+
+          //Fetch Request to create and save the labour_hours.json file
+          fetch("/createjson", {
+            method: "post",
+            headers: {
+              "Content-type": "application/json",
+            },
+            body: JSON.stringify({
+              updatedJSON: newJSONFile,
+            }),
+          });
+
+
+          //Display the output for a simple employee/date
+          document.querySelector(".display").textContent = newJSONFile;
+        });
+
+      //Calculate the breakdown of the hours based on the 4 different time periods
+      function getPeriods(total, startTime) {
+        let workDay = startTime.format("YYYY-MM-DD");
+        let format = "YYYY-MM-DD HH:mm:ss";
+        let morningStart = moment(workDay + "05:00:00", format);
+        let morningEnd = moment(workDay + "12:00:00", format);
+        let afternoonStart = moment(workDay + "12:00:00", format);
+        let afternoonEnd = moment(workDay + "18:00:00", format);
+        let eveningStart = moment(workDay + "18:00:00", format);
+        let eveningEnd = moment(workDay + "23:00:00", format);
+        let nightStart = moment(workDay + "23:00:00", format);
+        let nightEnd = moment(workDay + "05:00:00", format);
+        if (startTime.isBetween(morningStart, morningEnd)) {
+          period1 = Math.abs(
+            morningEnd.diff(startTime, "hours", "minutes", "seconds")
+          );
+          if (total < period1) {
+            period1 = total;
+            period2 = 0;
+            period3 = 0;
+            period4 = 0;
+          } else {
+            total = total - period1;
+            if (total < 6) {
+              period2 = total;
+              period3 = 0;
+              period4 = 0;
+            } else {
+              period2 = 6;
+              total = total - period2;
+              if (total < 5) {
+                period3 = total;
+                period4 = 0;
+              } else {
+                period3 = 5;
+                total = total - period3;
+                if (total < 6) {
+                  period4 = total;
+                } else {
+                  period4 = 6;
+                  total = total - period4;
+                  if (total > 0) {
+                    period1 = total + period1;
+                  }
+                }
+              }
+            }
+          }
+        } else if (startTime.isBetween(afternoonStart, afternoonEnd)) {
+          period2 = Math.abs(
+            afternoonEnd.diff(startTime, "hours", "minutes", "seconds")
+          );
+          if (total < period2) {
+            period2 = total;
+            period1 = 0;
+            period3 = 0;
+            period4 = 0;
+          } else {
+            total = total - period2;
+            if (total < 5) {
+              period3 = total;
+              period4 = 0;
+              period1 = 0;
+            } else {
+              period3 = 5;
+              total = total - period3;
+              if (total < 6) {
+                period4 = total;
+                period1 = 0;
+              } else {
+                period4 = 6;
+                total = total - period4;
+                if (total < 7) {
+                  period1 = total;
+                } else {
+                  period1 = 7;
+                  total = total - period1;
+                  if (total > 0) {
+                    period2 = total + period2;
+                  }
+                }
+              }
+            }
+          }
+        } else if (startTime.isBetween(eveningStart, eveningEnd)) {
+          period3 = Math.abs(
+            eveningEnd.diff(startTime, "hours", "minutes", "seconds")
+          );
+          if (total < period3) {
+            period3 = total;
+            period1 = 0;
+            period2 = 0;
+            period4 = 0;
+          } else {
+            total = total - period3;
+            if (total < 6) {
+              period4 = total;
+              period1 = 0;
+              period2 = 0;
+            } else {
+              period4 = 6;
+              total = total - period4;
+              if (total < 7) {
+                period1 = total;
+                period2 = 0;
+              } else {
+                period1 = 7;
+                total = total - period1;
+                if (total < 6) {
+                  period2 = total;
+                } else {
+                  period2 = 6;
+                  total = total - period2;
+                  if (total > 0) {
+                    period3 = total + period3;
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          period4 = Math.abs(
+            nightEnd.diff(startTime, "hours", "minutes", "seconds")
+          );
+          if (period4 > total) {
+            period4 = total;
+            period1 = 0;
+            period2 = 0;
+            period3 = 0;
+          } else {
+            total = total - period4;
+            if (total < 7) {
+              period1 = total;
+              period2 = 0;
+              period3 = 0;
+            } else {
+              period1 = 7;
+              total = total - period1;
+              if (total < 6) {
+                period2 = total;
+                period3 = 0;
+              } else {
+                period2 = 6;
+                total = total - period2;
+                if (total < 5) {
+                  period3 = total;
+                } else {
+                  period3 = 5;
+                  total = total - period3;
+                  if (total > 0) {
+                    period4 = total + period4;
+                  }
+                }
+              }
+            }
+          }
+        }
+        return [period1, period2, period3, period4];
+      }
+    </script>
+  </body>
+</html>
