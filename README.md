@@ -21,7 +21,5 @@ Tech Used: HTML, CSS, Javascript, Nodejs, MomentJS.
 `npm start`
 
 # Future Optimizations
-- Optimize Image and Story Feed
-- Use React on the frontend
-- Add ability to Search
-- Add social media sharing ability# -Aperture-Laboratories---Push-Operations-Take-Home-Code-Test
+- Beautiful frontend display
+- Optimize analysis speed
